@@ -1,0 +1,55 @@
+name: Docker Build and Test
+
+on:
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - 'services/**'
+      - 'docker-compose.yml'
+
+jobs:
+  docker-compose-test:
+    name: Test Docker Compose
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create .env file
+        run: |
+          cat > .env << EOF
+          JWT_SECRET=test-secret-key
+          JWT_REFRESH_SECRET=test-refresh-secret
+          GRAFANA_PASSWORD=admin
+          POSTGRES_PASSWORD=postgres
+          EOF
+
+      - name: Build services
+        run: docker-compose build
+
+      - name: Start services
+        run: docker-compose up -d
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to be healthy..."
+          sleep 30
+          docker-compose ps
+
+      - name: Check service health
+        run: |
+          # Check API Gateway
+          curl -f http://localhost:4000/health || exit 1
+
+          # Check Auth Service
+          curl -f http://localhost:5000/health || exit 1
+
+          # Check Product Catalog
+          curl -f http://localhost:5001/health || exit 1
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker-compose logs
+
+      - name: Cleanup
+        if: always()
+        run: docker-compose down -v

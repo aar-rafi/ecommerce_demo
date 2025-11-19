@@ -1,0 +1,163 @@
+const express = require('express');
+const { createProxyMiddleware } = require('http-proxy-middleware');
+const cors = require('cors');
+const helmet = require('helmet');
+const rateLimit = require('express-rate-limit');
+require('dotenv').config();
+
+const { logger } = require('./utils/logger');
+const { setupMetrics, metricsMiddleware } = require('./utils/metrics');
+const { authMiddleware } = require('./middleware/auth');
+const { circuitBreaker } = require('./middleware/circuitBreaker');
+
+const app = express();
+const PORT = process.env.PORT || 4000;
+
+// Security
+app.use(helmet());
+app.use(cors({
+  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  credentials: true
+}));
+
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 1000, // Higher limit for gateway
+  message: 'Too many requests from this IP'
+});
+app.use(limiter);
+
+// Body parsing
+app.use(express.json());
+
+// Metrics
+setupMetrics(app);
+app.use(metricsMiddleware);
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({
+    status: 'healthy',
+    service: 'api-gateway',
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime()
+  });
+});
+
+app.get('/ready', async (req, res) => {
+  // Check if all services are reachable
+  const axios = require('axios');
+  const services = [
+    { name: 'auth', url: process.env.AUTH_SERVICE_URL },
+    { name: 'products', url: process.env.PRODUCT_SERVICE_URL },
+    { name: 'cart', url: process.env.CART_SERVICE_URL },
+    { name: 'orders', url: process.env.ORDER_SERVICE_URL }
+  ];
+
+  const checks = await Promise.allSettled(
+    services.map(s => axios.get(`${s.url}/health`, { timeout: 2000 }))
+  );
+
+  const allHealthy = checks.every(c => c.status === 'fulfilled');
+
+  res.status(allHealthy ? 200 : 503).json({
+    status: allHealthy ? 'ready' : 'not ready',
+    services: services.map((s, i) => ({
+      name: s.name,
+      status: checks[i].status === 'fulfilled' ? 'up' : 'down'
+    }))
+  });
+});
+
+// Service URLs
+const AUTH_SERVICE = process.env.AUTH_SERVICE_URL || 'http://localhost:5000';
+const PRODUCT_SERVICE = process.env.PRODUCT_SERVICE_URL || 'http://localhost:5001';
+const CART_SERVICE = process.env.CART_SERVICE_URL || 'http://localhost:5002';
+const ORDER_SERVICE = process.env.ORDER_SERVICE_URL || 'http://localhost:5003';
+const NOTIFICATION_SERVICE = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5004';
+
+// Proxy configurations
+const proxyOptions = {
+  changeOrigin: true,
+  logLevel: 'warn',
+  onError: (err, req, res) => {
+    logger.error('Proxy error:', err);
+    res.status(503).json({
+      error: 'Service temporarily unavailable',
+      message: 'The requested service is not responding'
+    });
+  },
+  onProxyReq: (proxyReq, req, res) => {
+    // Forward user info from JWT
+    if (req.user) {
+      proxyReq.setHeader('X-User-Id', req.user.userId);
+      proxyReq.setHeader('X-User-Email', req.user.email);
+      proxyReq.setHeader('X-User-Role', req.user.role);
+    }
+  }
+};
+
+// Auth routes (public)
+app.use('/api/auth', createProxyMiddleware({
+  target: AUTH_SERVICE,
+  ...proxyOptions
+}));
+
+// Product routes (public for reading, protected for writing)
+app.use('/api/products', circuitBreaker('products'), createProxyMiddleware({
+  target: PRODUCT_SERVICE,
+  ...proxyOptions
+}));
+
+// Cart routes (protected)
+app.use('/api/cart', authMiddleware, circuitBreaker('cart'), createProxyMiddleware({
+  target: CART_SERVICE,
+  ...proxyOptions
+}));
+
+// Order routes (protected)
+app.use('/api/orders', authMiddleware, circuitBreaker('orders'), createProxyMiddleware({
+  target: ORDER_SERVICE,
+  ...proxyOptions
+}));
+
+// Notification routes (internal only - optional protection)
+app.use('/api/notifications', circuitBreaker('notifications'), createProxyMiddleware({
+  target: NOTIFICATION_SERVICE,
+  ...proxyOptions
+}));
+
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({ error: 'Route not found' });
+});
+
+// Error handler
+app.use((err, req, res, next) => {
+  logger.error('Gateway error:', err);
+  res.status(500).json({
+    error: 'Internal server error',
+    ...(process.env.NODE_ENV === 'development' && { message: err.message })
+  });
+});
+
+// Start server
+app.listen(PORT, () => {
+  logger.info(`API Gateway running on port ${PORT}`);
+  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info('Service Routes:');
+  logger.info(`  - Auth: ${AUTH_SERVICE}`);
+  logger.info(`  - Products: ${PRODUCT_SERVICE}`);
+  logger.info(`  - Cart: ${CART_SERVICE}`);
+  logger.info(`  - Orders: ${ORDER_SERVICE}`);
+  logger.info(`  - Notifications: ${NOTIFICATION_SERVICE}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  logger.info('SIGTERM received, shutting down gracefully');
+  process.exit(0);
+});
+
+module.exports = app;

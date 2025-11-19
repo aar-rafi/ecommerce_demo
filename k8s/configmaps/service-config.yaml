@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: service-config
+  namespace: default
+data:
+  AUTH_SERVICE_URL: "http://auth-service:5000"
+  PRODUCT_SERVICE_URL: "http://product-catalog:5001"
+  CART_SERVICE_URL: "http://cart-service:5002"
+  ORDER_SERVICE_URL: "http://order-service:5003"
+  NOTIFICATION_SERVICE_URL: "http://notification-service:5004"
+  REDIS_URL: "redis://redis:6379"
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  CORS_ORIGIN: "http://localhost:3000"
+  NODE_ENV: "production"
