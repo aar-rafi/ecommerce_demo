@@ -57,7 +57,7 @@ fi
 echo ""
 echo "👤 Creating test user..."
 
-USER_RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "$API_URL/api/auth/register" \
+USER_RESPONSE=$(curl -s --connect-timeout 10 --max-time 30 -w "\nHTTP_CODE:%{http_code}" -X POST "$API_URL/api/auth/register" \
   -H "Content-Type: application/json" \
   -d '{
     "email": "test@example.com",
@@ -80,7 +80,7 @@ elif [ "$HTTP_CODE" = "409" ]; then
     echo ""
     echo "👤 Logging in with existing user..."
 
-    USER_RESPONSE=$(curl -s -X POST "$API_URL/api/auth/login" \
+    USER_RESPONSE=$(curl -s --connect-timeout 10 --max-time 30 -X POST "$API_URL/api/auth/login" \
       -H "Content-Type: application/json" \
       -d '{
         "email": "test@example.com",
@@ -125,7 +125,7 @@ PRODUCTS=(
 )
 
 for product in "${PRODUCTS[@]}"; do
-    RESPONSE=$(curl -s -w "\nHTTP_CODE:%{http_code}" -X POST "$API_URL/api/products" \
+    RESPONSE=$(curl -s --connect-timeout 10 --max-time 30 -w "\nHTTP_CODE:%{http_code}" -X POST "$API_URL/api/products" \
       -H "Content-Type: application/json" \
       -H "Authorization: Bearer $TOKEN" \
       -d "$product")
