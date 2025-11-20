@@ -81,6 +81,8 @@ const NOTIFICATION_SERVICE = process.env.NOTIFICATION_SERVICE_URL || 'http://loc
 const proxyOptions = {
   changeOrigin: true,
   logLevel: 'warn',
+  timeout: 30000, // 30 seconds
+  proxyTimeout: 30000, // 30 seconds
   onError: (err, req, res) => {
     logger.error('Proxy error:', err);
     res.status(503).json({
