@@ -80,23 +80,40 @@ const NOTIFICATION_SERVICE = process.env.NOTIFICATION_SERVICE_URL || 'http://loc
 // Proxy configurations
 const proxyOptions = {
   changeOrigin: true,
-  logLevel: 'warn',
-  timeout: 30000, // 30 seconds
-  proxyTimeout: 30000, // 30 seconds
+  logLevel: 'debug',
+  timeout: 60000, // 60 seconds
+  proxyTimeout: 60000, // 60 seconds
   onError: (err, req, res) => {
-    logger.error('Proxy error:', err);
+    logger.error('Proxy error:', {
+      message: err.message,
+      code: err.code,
+      errno: err.errno,
+      stack: err.stack
+    });
     res.status(503).json({
       error: 'Service temporarily unavailable',
-      message: 'The requested service is not responding'
+      message: 'The requested service is not responding',
+      details: err.message
     });
   },
   onProxyReq: (proxyReq, req, res) => {
+    logger.info(`Proxying ${req.method} ${req.url} to ${proxyReq.path}`);
+
+    // Set explicit timeout on the outgoing request
+    proxyReq.setTimeout(60000, () => {
+      logger.error('Proxy request timeout');
+      proxyReq.destroy();
+    });
+
     // Forward user info from JWT
     if (req.user) {
       proxyReq.setHeader('X-User-Id', req.user.userId);
       proxyReq.setHeader('X-User-Email', req.user.email);
       proxyReq.setHeader('X-User-Role', req.user.role);
     }
+  },
+  onProxyRes: (proxyRes, req, res) => {
+    logger.info(`Proxy response: ${proxyRes.statusCode} for ${req.method} ${req.url}`);
   }
 };
 
