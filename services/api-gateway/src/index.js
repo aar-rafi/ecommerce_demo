@@ -22,9 +22,11 @@ app.use(cors({
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 1000, // Higher limit for gateway
-  message: 'Too many requests from this IP'
+  windowMs: 1 * 60 * 1000, // 1 minute window
+  max: 100, // 100 requests per minute per IP
+  message: 'Too many requests from this IP, please try again later',
+  standardHeaders: true, // Return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // Disable the `X-RateLimit-*` headers
 });
 app.use(limiter);
 

@@ -3,14 +3,17 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { cartApi } from '@/services/api';
 import { useToast } from './use-toast';
+import { useAuth } from './use-auth';
 
 export function useCart() {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const { isAuthenticated } = useAuth();
 
   const { data: cart, isLoading, error } = useQuery({
     queryKey: ['cart'],
     queryFn: cartApi.get,
+    enabled: isAuthenticated, // Only fetch when authenticated
     retry: false,
   });
 
