@@ -120,6 +120,7 @@ services:
       DB_NAME: ecommerce_orders
       DB_USER: postgres
       DB_PASSWORD: postgres
+      JWT_SECRET: ${JWT_SECRET:-your-super-secret-jwt-key}
       CART_SERVICE_URL: http://cart-service:5002
       NOTIFICATION_SERVICE_URL: http://notification-service:5004
       CORS_ORIGIN: http://localhost:3000
