@@ -28,12 +28,18 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Body parsing
-app.use(express.json());
-
-// Metrics
+// Metrics (before body parsing)
 setupMetrics(app);
 app.use(metricsMiddleware);
+
+// Body parsing - SKIP for proxy routes to avoid consuming request stream
+app.use((req, res, next) => {
+  // Don't parse body for routes that will be proxied
+  if (req.path.startsWith('/api/')) {
+    return next();
+  }
+  express.json()(req, res, next);
+});
 
 // Health check
 app.get('/health', (req, res) => {
