@@ -9,7 +9,6 @@ const CART_SERVICE_URL = process.env.CART_SERVICE_URL || 'http://localhost:5002'
 const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5004';
 
 const createOrderSchema = Joi.object({
-  userId: Joi.number().integer().positive().required(),
   shippingAddress: Joi.string().min(10).required()
 });
 
@@ -22,7 +21,8 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ error: error.details[0].message });
     }
 
-    const { userId, shippingAddress } = value;
+    const { shippingAddress } = value;
+    const userId = req.user.id; // Get userId from JWT token
 
     // Get cart from cart service
     const cartResponse = await axios.get(
@@ -100,17 +100,14 @@ router.post('/', async (req, res) => {
 // Get user orders
 router.get('/', async (req, res) => {
   try {
-    const userId = req.query.userId;
-    if (!userId) {
-      return res.status(400).json({ error: 'userId is required' });
-    }
+    const userId = req.user.id; // Get userId from JWT token
 
     const result = await pool.query(
       'SELECT * FROM orders WHERE user_id = $1 ORDER BY created_at DESC',
       [userId]
     );
 
-    res.json({ orders: result.rows });
+    res.json(result.rows);
   } catch (error) {
     logger.error('Get orders error:', error);
     res.status(500).json({ error: 'Failed to retrieve orders' });
@@ -121,10 +118,12 @@ router.get('/', async (req, res) => {
 router.get('/:orderId', async (req, res) => {
   try {
     const { orderId } = req.params;
+    const userId = req.user.id; // Get userId from JWT token
 
+    // Verify order belongs to user
     const orderResult = await pool.query(
-      'SELECT * FROM orders WHERE id = $1',
-      [orderId]
+      'SELECT * FROM orders WHERE id = $1 AND user_id = $2',
+      [orderId, userId]
     );
 
     if (orderResult.rows.length === 0) {

@@ -9,6 +9,7 @@ const { setupDatabase } = require('./config/database');
 const { logger } = require('./utils/logger');
 const { setupMetrics, metricsMiddleware } = require('./utils/metrics');
 const { errorHandler } = require('./middleware/errorHandler');
+const { authMiddleware } = require('./middleware/auth');
 
 const app = express();
 const PORT = process.env.PORT || 5003;
@@ -50,7 +51,7 @@ app.get('/ready', async (req, res) => {
   }
 });
 
-app.use('/api/orders', orderRoutes);
+app.use('/api/orders', authMiddleware, orderRoutes);
 app.use(errorHandler);
 
 const startServer = async () => {
